@@ -152,7 +152,39 @@ defmodule OpenIDConnect do
     end
   end
 
-  @spec verify(provider, jwt, name) :: success(claims) | error(:verify)
+  @spec refresh_token(provider, jwt) :: success(map) | error(:refresh_token)
+
+  def refresh_token(provider, refresh_token) do
+    uri = access_token_uri(provider, :openid_connect)
+    config = config(provider, :openid_connect)
+
+    body =
+      %{
+        refresh_token: refresh_token,
+        grant_type: "refresh_token"
+      }
+      |> Map.to_list()
+
+      headers = [
+        {"Content-Type", "application/x-www-form-urlencoded"},
+        {"Authorization", "Basic #{Base.encode64("#{client_id(config)}:#{client_secret(config)}")}"}
+      ]
+
+    with {:ok, %HTTPoison.Response{status_code: status_code} = resp} when status_code in 200..299 <-
+           http_client().post(uri, {:form, body}, headers, http_client_options()),
+         {:ok, json} <- Jason.decode(resp.body),
+         {:ok, response} <- assert_json(json) do
+      {:ok, response}
+    else
+      {:ok, resp} ->
+        {:error, :refresh_token, resp}
+
+      {:error, reason} ->
+        {:error, :refresh_token, reason}
+    end
+  end
+
+  @spec verify(provider, jwt) :: success(claims) | error(:verify)
   @doc """
   Verifies the validity of the JSON Web Token (JWT)
 
